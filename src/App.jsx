@@ -3,22 +3,23 @@ import Quiz from "./components/Quiz";
 import JobCard from "./components/JobCard";
 import ChatBot from "./components/ChatBot";
 import Roadmap from "./components/Roadmap";
+import Login from "./components/Login"; // New component
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import "./index.css";
 
 const App = () => {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [grade, setGrade] = useState(10); // Store selected grade
   const [quizCompleted, setQuizCompleted] = useState(false);
   const [suggestedJobs, setSuggestedJobs] = useState([]);
   const [selectedJob, setSelectedJob] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
-  const currentGrade = 10;
 
   const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-  // Utility function to clean job titles by removing stars
   const cleanJobTitle = (title) => {
     return title
       .replace(/\*\*/g, "") // Remove all ** markers
@@ -49,7 +50,7 @@ const App = () => {
 
     setIsSearching(true);
     try {
-      const prompt = `Suggest 3 career paths related to "${searchQuery}" for a 10-12th grade student. Format each suggestion as: "Job Title: Description".and dont give me unrelated styles just plain text is fine with bold and dont mention numbers.dont mention ** when you give`;
+      const prompt = `Suggest 3 career paths related to "${searchQuery}" for a ${grade}th grade student. Format each suggestion as: "Job Title: Description".and dont give me unrelated styles just plain text is fine with bold and dont mention numbers.dont mention ** when you give`;
       const result = await model.generateContent(prompt);
       const text = result.response.text();
       console.log("Raw search response:", text);
@@ -89,8 +90,10 @@ const App = () => {
   return (
     <div className="app">
       <h1>Career Guidance for Grades 10-12</h1>
-      {!quizCompleted ? (
-        <Quiz onComplete={handleQuizComplete} />
+      {!isLoggedIn ? (
+        <Login setIsLoggedIn={setIsLoggedIn} setGrade={setGrade} />
+      ) : !quizCompleted ? (
+        <Quiz onComplete={handleQuizComplete} grade={grade} />
       ) : (
         <div>
           <h2>Suggested Careers</h2>
@@ -156,7 +159,7 @@ const App = () => {
           </div>
           {selectedJob && (
             <div className="mt-8">
-              <Roadmap jobTitle={selectedJob} currentGrade={currentGrade} />
+              <Roadmap jobTitle={selectedJob} currentGrade={grade} />
             </div>
           )}
         </div>

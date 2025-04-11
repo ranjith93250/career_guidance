@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const Quiz = ({ onComplete }) => {
+const Quiz = ({ onComplete, grade }) => {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState({});
   const [isLoading, setIsLoading] = useState(false);
@@ -9,29 +9,45 @@ const Quiz = ({ onComplete }) => {
   const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-  const questions = [
-    "What is your favorite subject or activity?",
-    "What kind of work environment do you prefer (e.g., indoors, outdoors, collaborative)?",
-    "What skill are you most proud of?",
-    "What kind of impact do you want to have (e.g., helping people, advancing knowledge)?",
-  ];
+  const questions = {
+    10: [
+      "What is your favorite subject or activity in grade 10?",
+      "What kind of work environment do you prefer (e.g., indoors, outdoors, collaborative)?",
+      "What skill are you most proud of this year?",
+      "What kind of impact do you want to have as a 10th grader?",
+    ],
+    11: [
+      "What subject are you excelling in during grade 11?",
+      "Do you prefer working alone or in a team?",
+      "What skill have you developed this year?",
+      "What impact do you aim for as an 11th grader?",
+    ],
+    12: [
+      "What’s your strongest subject in grade 12?",
+      "Do you prefer a structured or creative work environment?",
+      "What skill have you mastered this year?",
+      "What legacy do you want to leave as a 12th grader?",
+    ],
+  };
+
+  const currentQuestions = questions[grade] || questions[10]; // Default to grade 10 if grade is invalid
 
   const handleAnswer = (answer) => {
     setAnswers({ ...answers, [currentQuestion + 1]: answer });
   };
 
   const handleNext = async () => {
-    if (currentQuestion < questions.length - 1) {
+    if (currentQuestion < currentQuestions.length - 1) {
       setCurrentQuestion(currentQuestion + 1);
     } else {
       setIsLoading(true);
       try {
-        const prompt = `Based on the following answers from a 10-12th grade student, suggest 3 career paths with job titles and short descriptions:\n
-        1. Favorite subject/activity: ${answers[1] || "N/A"}\n
-        2. Preferred work environment: ${answers[2] || "N/A"}\n
-        3. Proudest skill: ${answers[3] || "N/A"}\n
-        4. Desired impact: ${answers[4] || "N/A"}\n
-        Format each suggestion as: "Job Title: Description"`;
+        const prompt = `Based on the following answers from a ${grade}th grade student, suggest 3 career paths with job titles and short descriptions:\n
+          1. Favorite subject/activity: ${answers[1] || "N/A"}\n
+          2. Preferred work environment: ${answers[2] || "N/A"}\n
+          3. Proudest skill: ${answers[3] || "N/A"}\n
+          4. Desired impact: ${answers[4] || "N/A"}\n
+          Format each suggestion as: "Job Title: Description"`;
         console.log("Quiz prompt:", prompt);
         const result = await model.generateContent(prompt);
         const text = result.response.text();
@@ -41,7 +57,6 @@ const Quiz = ({ onComplete }) => {
           .split("\n")
           .filter((line) => line.trim() !== "" && line.includes(":"))
           .map((line) => {
-            // Split on the first occurrence of ": " after the job title
             const firstColonIndex = line.indexOf(": ");
             if (firstColonIndex === -1) {
               return { title: line, description: "No description available" };
@@ -65,9 +80,9 @@ const Quiz = ({ onComplete }) => {
 
   return (
     <div className="max-w-2xl mx-auto p-6 bg-white rounded-xl shadow-lg">
-      <h2 className="text-2xl font-bold text-teal-800 mb-6">Career Quiz</h2>
+      <h2 className="text-2xl font-bold text-teal-800 mb-6">Career Quiz for Grade {grade}</h2>
       <div className="mb-6">
-        <p className="text-lg text-gray-700 mb-4">{questions[currentQuestion]}</p>
+        <p className="text-lg text-gray-700 mb-4">{currentQuestions[currentQuestion]}</p>
         <input
           type="text"
           value={answers[currentQuestion + 1] || ""}
@@ -81,7 +96,7 @@ const Quiz = ({ onComplete }) => {
         disabled={isLoading}
         className="w-full py-3 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors disabled:bg-teal-400"
       >
-        {isLoading ? "Loading..." : currentQuestion === questions.length - 1 ? "Submit" : "Next"}
+        {isLoading ? "Loading..." : currentQuestion === currentQuestions.length - 1 ? "Submit" : "Next"}
       </button>
     </div>
   );
