@@ -1,0 +1,136 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Light theme defaults (already applied by Tailwind) */
+  body {
+    @apply bg-gray-100 text-gray-900;
+  }
+
+  /* Dark theme overrides */
+  .dark body {
+    @apply bg-gray-900 text-white;
+  }
+
+  .dark h1 {
+    @apply text-white;
+  }
+
+  .dark h2 {
+    @apply text-white;
+  }
+
+  .dark h3 {
+    @apply text-teal-100;
+  }
+
+  .dark input {
+    @apply bg-gray-800 border-gray-700 text-white placeholder-gray-400;
+  }
+
+  .dark .bg-white {
+    @apply bg-gray-800;
+  }
+
+  .dark .text-teal-800 {
+    @apply text-teal-100;
+  }
+
+  .dark .border {
+    @apply border-gray-700;
+  }
+
+  .dark .bg-gray-100 {
+    @apply bg-gray-800;
+  }
+
+  .dark .text-gray-800 {
+    @apply text-gray-200;
+  }
+
+  .dark .bg-teal-50 {
+    @apply bg-gray-700;
+  }
+
+  .dark .border-teal-200 {
+    @apply border-gray-600;
+  }
+
+  .dark .bg-gray-200 {
+    @apply bg-gray-600;
+  }
+
+  .dark .text-gray-700 {
+    @apply text-gray-300;
+  }
+
+  .dark .bg-green-500 {
+    @apply bg-green-600;
+  }
+
+  .dark .hover:bg-gray-300 {
+    @apply hover:bg-gray-500;
+  }
+
+  .dark .card {
+    @apply bg-gray-800 text-white;
+  }
+
+  .dark .read-the-docs {
+    @apply text-gray-400;
+  }
+
+  /* Add support for new chatbot elements */
+  .dark .bg-blue-500 {
+    @apply bg-blue-600;
+  }
+
+  .dark .hover:bg-blue-600 {
+    @apply hover:bg-blue-700;
+  }
+}
+
+/* Existing CSS from Vite template */
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #61dafbaa);
+}
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card {
+  padding: 2em;
+}
+
+.read-the-docs {
+  color: #888;
+}
