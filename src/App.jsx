@@ -3,7 +3,9 @@ import Quiz from "./components/Quiz";
 import JobCard from "./components/JobCard";
 import ChatBot from "./components/ChatBot";
 import Roadmap from "./components/Roadmap";
-import Login from "./components/Login"; // New component
+import Login from "./components/Login";
+import SearchFilters from "./components/SearchFilters";
+import AnalyticsDashboard from "./components/AnalyticsDashboard";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import "./index.css";
 
@@ -16,6 +18,8 @@ const App = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [activeFilters, setActiveFilters] = useState(null);
+  const [showAnalytics, setShowAnalytics] = useState(false);
 
   const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
@@ -50,7 +54,25 @@ const App = () => {
 
     setIsSearching(true);
     try {
-      const prompt = `Suggest 3 career paths related to "${searchQuery}" for a ${grade}th grade student. Format each suggestion as: "Job Title: Description".and dont give me unrelated styles just plain text is fine with bold and dont mention numbers.dont mention ** when you give`;
+      // Include filters in the prompt if they exist
+      let filterText = "";
+      if (activeFilters) {
+        if (activeFilters.categories.length > 0) {
+          filterText += ` in ${activeFilters.categories.join(", ")} sector`;
+        }
+        if (activeFilters.location !== "Any") {
+          filterText += ` with ${activeFilters.location} work options`;
+        }
+        if (activeFilters.requiredEducation !== "Any") {
+          filterText += ` requiring ${activeFilters.requiredEducation} education`;
+        }
+        if (activeFilters.salaryRange[1] !== 25) {
+          filterText += ` with salary range up to ${activeFilters.salaryRange[1]} lakhs per year`;
+        }
+      }
+
+      const prompt = `Suggest 3 career paths related to "${searchQuery}"${filterText} for a ${grade}th grade student. Format each suggestion as: "Job Title: Description". For each job, include brief details about required education, potential salary range (in ₹ lakhs per year), and work location options. Provide plain text with job titles in bold.`;
+      
       const result = await model.generateContent(prompt);
       const text = result.response.text();
       console.log("Raw search response:", text);
@@ -87,6 +109,17 @@ const App = () => {
     setSelectedJob(selectedJob === cleanedTitle ? null : cleanedTitle); // Toggle selection
   };
 
+  const handleApplyFilters = (filters) => {
+    setActiveFilters(filters);
+    if (searchQuery.trim()) {
+      handleSearch(); // Re-search with new filters
+    }
+  };
+
+  const toggleAnalytics = () => {
+    setShowAnalytics(!showAnalytics);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 to-cyan-50">
       <header className="bg-white shadow-md">
@@ -99,7 +132,16 @@ const App = () => {
               Career Guidance
             </h1>
             {isLoggedIn && (
-              <div className="flex items-center">
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={toggleAnalytics}
+                  className="px-3 py-1.5 bg-indigo-100 text-indigo-800 rounded-full hover:bg-indigo-200 transition-colors text-sm font-medium flex items-center"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                  {showAnalytics ? "Hide Analytics" : "Career Analytics"}
+                </button>
                 <div className="bg-teal-100 text-teal-800 text-sm font-medium px-3 py-1.5 rounded-full">
                   Grade {grade} Student
                 </div>
@@ -122,8 +164,17 @@ const App = () => {
           </div>
         ) : (
           <div>
+            {showAnalytics && (
+              <div className="bg-white rounded-xl shadow-lg overflow-hidden p-6 mb-8">
+                <AnalyticsDashboard onSelectJob={handleJobSelect} />
+              </div>
+            )}
+          
             <div className="bg-white rounded-xl shadow-lg overflow-hidden p-6 mb-8">
               <h2 className="text-2xl font-bold text-teal-800 mb-6">Explore Careers</h2>
+              
+              {/* Search Filters */}
+              <SearchFilters onApplyFilters={handleApplyFilters} />
               
               <div className="max-w-3xl mx-auto">
                 <div className="relative">
