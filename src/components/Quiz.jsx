@@ -23,7 +23,7 @@ const Quiz = ({ onComplete, grade }) => {
       "What impact do you aim for as an 11th grader?",
     ],
     12: [
-      "What’s your strongest subject in grade 12?",
+      "What's your strongest subject in grade 12?",
       "Do you prefer a structured or creative work environment?",
       "What skill have you mastered this year?",
       "What legacy do you want to leave as a 12th grader?",
@@ -78,26 +78,99 @@ const Quiz = ({ onComplete, grade }) => {
     }
   };
 
+  // Handle key press for the input field
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !isLoading && answers[currentQuestion + 1]?.trim()) {
+      e.preventDefault();
+      handleNext();
+    }
+  };
+
   return (
     <div className="max-w-2xl mx-auto p-6 bg-white rounded-xl shadow-lg">
       <h2 className="text-2xl font-bold text-teal-800 mb-6">Career Quiz for Grade {grade}</h2>
+      
+      {/* Progress indicator */}
+      <div className="mb-6 flex justify-between">
+        {currentQuestions.map((_, index) => (
+          <div 
+            key={index}
+            className={`h-2 rounded-full flex-1 mx-0.5 ${
+              index === currentQuestion 
+                ? 'bg-teal-600' 
+                : index < currentQuestion 
+                  ? 'bg-teal-300' 
+                  : 'bg-gray-200'
+            }`}
+          />
+        ))}
+      </div>
+      
       <div className="mb-6">
         <p className="text-lg text-gray-700 mb-4">{currentQuestions[currentQuestion]}</p>
         <input
           type="text"
           value={answers[currentQuestion + 1] || ""}
           onChange={(e) => handleAnswer(e.target.value)}
+          onKeyDown={handleKeyPress}
           placeholder="Type your answer..."
           className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+          autoFocus
         />
       </div>
-      <button
-        onClick={handleNext}
-        disabled={isLoading}
-        className="w-full py-3 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors disabled:bg-teal-400"
-      >
-        {isLoading ? "Loading..." : currentQuestion === currentQuestions.length - 1 ? "Submit" : "Next"}
-      </button>
+      
+      <div className="flex justify-between items-center">
+        {currentQuestion > 0 && (
+          <button
+            onClick={() => setCurrentQuestion(currentQuestion - 1)}
+            className="py-2 px-4 text-teal-600 hover:text-teal-800 transition-colors"
+          >
+            ← Previous
+          </button>
+        )}
+        
+        <button
+          onClick={handleNext}
+          disabled={isLoading || !answers[currentQuestion + 1]?.trim()}
+          className={`py-3 px-6 bg-teal-600 text-white rounded-lg transition-colors ${
+            answers[currentQuestion + 1]?.trim() 
+              ? 'hover:bg-teal-700' 
+              : 'opacity-50 cursor-not-allowed'
+          }`}
+        >
+          {isLoading ? (
+            <span className="flex items-center">
+              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Processing...
+            </span>
+          ) : currentQuestion === currentQuestions.length - 1 ? (
+            <span className="flex items-center">
+              Submit
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+              </svg>
+            </span>
+          ) : (
+            <span className="flex items-center">
+              Next
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </span>
+          )}
+        </button>
+        
+        {currentQuestion > 0 && !currentQuestion < currentQuestions.length - 1 && (
+          <div className="w-20">{/* Placeholder for alignment */}</div>
+        )}
+      </div>
+      
+      <div className="text-center text-gray-500 text-xs mt-6">
+        Press Enter to continue to the next question
+      </div>
     </div>
   );
 };
