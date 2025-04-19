@@ -1,0 +1,22 @@
+# Frontend Dependencies
+react>=18.2.0
+react-dom>=18.2.0
+vite>=4.4.0
+@vitejs/plugin-react>=4.0.0
+react-modal>=3.16.1
+tailwindcss>=3.3.3
+postcss>=8.4.27
+autoprefixer>=10.4.14
+
+# Google AI Integration
+@google/generative-ai>=0.1.0
+
+# Development Dependencies
+eslint>=8.45.0
+eslint-plugin-react>=7.32.2
+eslint-plugin-react-hooks>=4.6.0
+eslint-plugin-react-refresh>=0.4.3
+
+# Note: For a React project, these dependencies are typically managed via package.json and npm/yarn
+# Use the following command to install dependencies (after setting up package.json):
+# npm install or yarn install 
