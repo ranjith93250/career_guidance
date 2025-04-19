@@ -116,4 +116,4 @@ The Career Guidance Application is an interactive web platform designed to help 
 - Internship and job opportunity listings
 
 ## License
-[Your License] - See LICENSE file for details 420
+[Your License] - See LICENSE file for details 420...
