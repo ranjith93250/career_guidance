@@ -28,20 +28,108 @@ const Roadmap = ({ jobTitle, currentGrade }) => {
   const [expandedResources, setExpandedResources] = useState(false);
   const [progress, setProgress] = useState(0);
   const [regenerateCount, setRegenerateCount] = useState(0);
+  const [generationAttempted, setGenerationAttempted] = useState(false);
+  // Local fallback for completed steps when API fails
+  const [localCompletedSteps, setLocalCompletedSteps] = useState([]);
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
 
-  const { getCompletedSteps, toggleStepCompletion, addViewedCareer } = useUserContext();
+  // Get user context (may be null or have authentication errors)
+  const userContext = useUserContext();
+  
+  // Safely access user context functions with fallbacks
+  const getCompletedSteps = (jobTitle) => {
+    try {
+      if (userContext && userContext.getCompletedSteps) {
+        const steps = userContext.getCompletedSteps(jobTitle);
+        if (Array.isArray(steps)) {
+          return steps;
+        }
+      }
+      return localCompletedSteps;
+    } catch (error) {
+      console.error("Error getting completed steps:", error);
+      return localCompletedSteps;
+    }
+  };
+  
+  const toggleStepCompletion = (jobTitle, index) => {
+    try {
+      console.log("Toggling step completion for job:", jobTitle, "index:", index);
+      
+      // First update local state for immediate UI feedback
+      const updatedSteps = [...localCompletedSteps];
+      const stepIndex = updatedSteps.indexOf(index);
+      
+      if (stepIndex === -1) {
+        updatedSteps.push(index);
+      } else {
+        updatedSteps.splice(stepIndex, 1);
+      }
+      
+      setLocalCompletedSteps(updatedSteps);
+      
+      // Then try to update in the user context/backend if available
+      if (userContext && userContext.toggleStepCompletion) {
+        userContext.toggleStepCompletion(jobTitle, index);
+      }
+    } catch (error) {
+      console.error("Error toggling step completion:", error);
+    }
+    
+    // Force refresh progress calculation
+    const currentSteps = getCompletedSteps(jobTitle);
+    if (roadmap.length > 0) {
+      const percentage = Math.round((currentSteps.length / roadmap.length) * 100);
+      setProgress(percentage);
+    }
+  };
+  
+  const addViewedCareer = (jobTitle) => {
+    try {
+      if (userContext && userContext.addViewedCareer) {
+        userContext.addViewedCareer(jobTitle);
+      }
+    } catch (error) {
+      console.error("Error adding viewed career:", error);
+    }
+  };
+  
+  // Get completed steps, falling back to local state if API fails
   const completedSteps = getCompletedSteps(jobTitle);
 
   // Check if API key exists
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   const hasApiKey = !!apiKey;
 
+  // Check authentication status when component loads
   useEffect(() => {
+    const checkAuthStatus = async () => {
+      try {
+        const response = await fetch('/api/user');
+        if (response.status === 401) {
+          console.log("User is not authenticated, using local storage for progress");
+          setIsAuthenticated(false);
+        } else {
+          setIsAuthenticated(true);
+        }
+      } catch (error) {
+        console.error("Error checking authentication status:", error);
+        setIsAuthenticated(false);
+      }
+    };
+    
+    checkAuthStatus();
+  }, []);
+
+  useEffect(() => {
+    // Log API key status (without revealing the key)
+    console.log("API key available:", hasApiKey);
+    
     // Log viewed career for analytics
     if (jobTitle) {
       addViewedCareer(jobTitle);
     }
-  }, [jobTitle, addViewedCareer]);
+  }, [jobTitle, hasApiKey]);
 
   // Initialize API if key exists
   const genAI = hasApiKey ? new GoogleGenerativeAI(apiKey) : null;
@@ -50,77 +138,131 @@ const Roadmap = ({ jobTitle, currentGrade }) => {
   // Calculate progress percentage
   useEffect(() => {
     if (roadmap.length > 0) {
-      const percentage = Math.round((completedSteps.length / roadmap.length) * 100);
+      const steps = Array.isArray(completedSteps) ? completedSteps : [];
+      const percentage = Math.round((steps.length / roadmap.length) * 100);
       setProgress(percentage);
     }
   }, [completedSteps, roadmap]);
 
   // Auto-generate roadmap when job title changes
   useEffect(() => {
+    console.log("Roadmap component received jobTitle:", jobTitle);
+    console.log("Roadmap component received currentGrade:", currentGrade);
+    
     if (jobTitle) {
       generateRoadmap();
     }
   }, [jobTitle]);
 
   const generateRoadmap = async () => {
-    setIsLoading(true);
-    setError(null);
-    setRoadmap([]); // Reset roadmap on new request
-    setActiveStep(null);
-    setRegenerateCount(prev => prev + 1);
-
-    if (!hasApiKey) {
-      setError("API key is missing. Please add your Gemini API key to the environment variables.");
-      setIsLoading(false);
-      // Set fallback roadmap
-      setRoadmap(getFallbackRoadmap());
-      return;
-    }
-
     try {
-      // Clean the jobTitle by removing numbering, extra formatting, and trailing colon
-      const cleanJobTitle = jobTitle
-        .replace(/^\d+\.\s*\*\*|\*\*/g, "") // Remove numbering and ** markers
-        .replace(/:.*$/, "") // Remove trailing colon and anything after it
-        .trim();
-      console.log("Cleaned Job Title:", cleanJobTitle); // Log the cleaned job title
+      setError(null);
+      setIsLoading(true);
+      setRoadmap([]); // Clear existing roadmap when starting a new request
+      setActiveStep(null);
+      setRegenerateCount(prev => prev + 1);
+      setGenerationAttempted(true);
+      
+      console.log("Starting roadmap generation for:", jobTitle);
+      console.log("API key available:", hasApiKey);
+      
+      // Create a safety timeout to prevent hanging indefinitely
+      const safetyTimeout = setTimeout(() => {
+        if (isLoading) {
+          console.log("Safety timeout triggered - falling back to default roadmap");
+          setIsLoading(false);
+          setError("Request took too long. Using default career roadmap.");
+          const fallbackMap = getFallbackRoadmap(jobTitle);
+          setRoadmap(fallbackMap);
+          setResources(getFallbackResources(jobTitle));
+        }
+      }, 10000); // 10 second timeout
 
-      // Adjust the prompt to handle a broader range of careers
-      const prompt = `Create a concise roadmap for a grade ${currentGrade} student to become a ${cleanJobTitle}. Provide exactly 5 key steps in bullet point format, with each line starting with "- " followed by the step description (e.g., "- Complete 10th grade with strong science scores"). If the career is specific to India (e.g., Medical Researcher), include important exams (e.g., NEET) and top colleges (e.g., AIIMS) where applicable. If the career is not specific to India (e.g., Enlisted Soldier), provide a general roadmap suitable for an international context, tailored for a student of the given grade. Do not include any introductory text, extra formatting, or steps outside the 5-key range. Respond only with the bullet points.`;
-      console.log("Sending prompt to Gemini API:", prompt); // Log the prompt
+      try {
+        // Always have a fallback ready in case anything fails
+        const fallbackMap = getFallbackRoadmap(jobTitle);
+        
+        if (!hasApiKey) {
+          console.log("No API key found, using fallback roadmap");
+          setError("API key is missing. Using fallback career roadmap.");
+          setIsLoading(false);
+          // Set fallback roadmap
+          console.log("Fallback roadmap:", fallbackMap);
+          setRoadmap(fallbackMap);
+          // Also set fallback resources
+          setResources(getFallbackResources(jobTitle));
+          clearTimeout(safetyTimeout);
+          return;
+        }
+        
+        // Clean the jobTitle by removing numbering, extra formatting, and trailing colon
+        const cleanJobTitle = jobTitle
+          .replace(/^\d+\.\s*\*\*|\*\*/g, "") // Remove numbering and ** markers
+          .replace(/:.*$/, "") // Remove trailing colon and anything after it
+          .substring(0, 50) // Limit length to avoid very long prompts
+          .trim();
+        console.log("Cleaned Job Title:", cleanJobTitle); // Log the cleaned job title
 
-      const result = await model.generateContent(prompt);
-      const text = result.response.text();
-      console.log("Raw response from Gemini API:", text); // Log the raw response
+        // Adjust the prompt to handle a broader range of careers
+        const prompt = `Create a concise roadmap for a grade ${currentGrade} student to become a ${cleanJobTitle}. Provide exactly 5 key steps in bullet point format, with each line starting with "- " followed by the step description (e.g., "- Complete 10th grade with strong science scores"). If the career is specific to India (e.g., Medical Researcher), include important exams (e.g., NEET) and top colleges (e.g., AIIMS) where applicable. If the career is not specific to India (e.g., Enlisted Soldier), provide a general roadmap suitable for an international context, tailored for a student of the given grade. Do not include any introductory text, extra formatting, or steps outside the 5-key range. Respond only with the bullet points.`;
+        console.log("Sending prompt to Gemini API:", prompt); // Log the prompt
 
-      // Parse the response into bullet points with flexible matching
-      const steps = text
-        .split("\n")
-        .filter((line) => line.trim() !== "" && (line.trim().startsWith("- ") || line.trim().startsWith("* ")))
-        .map((line) => {
-          // Remove bullet point markers (* or -) and trim
-          const cleanedLine = line.replace(/^[-*]\s*/, "").trim();
-          // Split on the first colon if present, otherwise use the whole line
-          const [step] = cleanedLine.split(":").map((part) => part.trim());
-          return step || cleanedLine;
-        });
+        try {
+          const result = await Promise.race([
+            model.generateContent(prompt),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error("API request timeout")), 8000) // 8 second timeout
+            )
+          ]);
+          
+          const text = result.response.text();
+          console.log("Raw response from Gemini API:", text); // Log the raw response
 
-      if (steps.length < 5) {
-        throw new Error(`Expected 5 steps, but got ${steps.length}. Response: ${text}`);
+          // Parse the response into bullet points with flexible matching
+          const steps = text
+            .split("\n")
+            .filter((line) => line.trim() !== "" && (line.trim().startsWith("- ") || line.trim().startsWith("* ")))
+            .map((line) => {
+              // Remove bullet point markers (* or -) and trim
+              const cleanedLine = line.replace(/^[-*]\s*/, "").trim();
+              // Split on the first colon if present, otherwise use the whole line
+              const [step] = cleanedLine.split(":").map((part) => part.trim());
+              return step || cleanedLine;
+            });
+
+          if (steps.length < 5) {
+            console.log(`Expected 5 steps, but got ${steps.length}. Using fallback roadmap.`);
+            throw new Error(`Expected 5 steps, but got ${steps.length}. Response: ${text}`);
+          }
+
+          console.log("Successfully generated roadmap:", steps);
+          setRoadmap(steps);
+          fetchResources(cleanJobTitle);
+        } catch (apiError) {
+          console.error("API error:", apiError.message);
+          throw apiError; // Let the outer try/catch handle it
+        }
+      } catch (error) {
+        console.error("Error generating roadmap:", error.message);
+        setError("Failed to generate roadmap. Using default roadmap instead.");
+        // Set fallback roadmap based on career type
+        const fallbackMap = getFallbackRoadmap(jobTitle);
+        console.log("Using fallback roadmap due to error:", fallbackMap);
+        setRoadmap(fallbackMap);
+        setResources(getFallbackResources(jobTitle));
+      } finally {
+        setIsLoading(false);
+        clearTimeout(safetyTimeout);
       }
-
-      setRoadmap(steps);
-      fetchResources(cleanJobTitle);
-    } catch (error) {
-      console.error("Error generating roadmap:", error.message); // Log the error
-      setError("Failed to generate roadmap. Please try again or check your API key.");
-      // Set fallback roadmap based on career type
-      setRoadmap(getFallbackRoadmap(jobTitle));
-    } finally {
+    } catch (outerError) {
+      console.error("Outer error in generateRoadmap:", outerError);
       setIsLoading(false);
+      setError("An unexpected error occurred. Using default roadmap.");
+      setRoadmap(getFallbackRoadmap(jobTitle));
+      setResources(getFallbackResources(jobTitle));
     }
   };
-
+  
   // Get fallback roadmap based on career type
   const getFallbackRoadmap = (title = '') => {
     const lowerTitle = title.toLowerCase();
@@ -132,6 +274,14 @@ const Roadmap = ({ jobTitle, currentGrade }) => {
         "Enroll in MBBS at AIIMS or similar top college",
         "Complete medical residency program",
         "Obtain medical license and start practice",
+      ];
+    } else if (lowerTitle.includes('web') || lowerTitle.includes('developer') || lowerTitle.includes('backend')) {
+      return [
+        "Learn programming basics (JavaScript, Python) and computer science fundamentals",
+        "Study backend technologies (Node.js, Express, databases like MongoDB or SQL)",
+        "Build projects to practice server-side programming and API development",
+        "Learn about cloud services, deployment, and DevOps fundamentals",
+        "Develop a portfolio and contribute to open source projects",
       ];
     } else if (lowerTitle.includes('engineer') || lowerTitle.includes('tech')) {
       return [
@@ -167,10 +317,18 @@ const Roadmap = ({ jobTitle, currentGrade }) => {
     }
 
     try {
+      console.log("Fetching resources for:", career);
       const prompt = `Suggest 3-5 specific online resources (like websites, courses, or tools) for students interested in pursuing a career as a ${career}. For each resource, provide: 1) The name of the resource, 2) A very brief description (10 words max), and 3) What makes it valuable. Format as a bullet list with resource name in bold followed by description and value. Be concise and focus on quality resources only.`;
       
-      const result = await model.generateContent(prompt);
+      const result = await Promise.race([
+        model.generateContent(prompt),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Resources API request timeout")), 8000) // 8 second timeout
+        )
+      ]);
+      
       const text = result.response.text();
+      console.log("Resources API response received, length:", text.length);
       
       // Extract resources from the text
       const resourceList = text
@@ -198,9 +356,113 @@ const Roadmap = ({ jobTitle, currentGrade }) => {
           };
         });
       
+      if (resourceList.length === 0) {
+        console.log("No resources extracted from API response, using fallback");
+        throw new Error("Could not extract resources from API response");
+      }
+      
+      console.log("Successfully fetched resources:", resourceList.length);
       setResources(resourceList);
     } catch (error) {
       console.error("Error fetching resources:", error.message);
+      // Use fallback resources
+      const fallbackList = getFallbackResources(career);
+      console.log("Using fallback resources:", fallbackList.length);
+      setResources(fallbackList);
+    }
+  };
+
+  // Main function to generate resources using direct API call or SDK based on availability
+  const generateResources = async (career) => {
+    try {
+      if (!hasApiKey) {
+        setResources(getFallbackResources(career));
+        return;
+      }
+
+      const systemPrompt = `Suggest 3-5 specific online resources (like websites, courses, or tools) for students interested in pursuing a career as a ${career}. For each resource, provide: 1) The name of the resource, 2) A very brief description (10 words max), and 3) What makes it valuable. Format as a bullet list with resource name in bold followed by description and value. Be concise and focus on quality resources only.`;
+      
+      // Try to use the model if available
+      if (model) {
+        await fetchResources(career);
+      } else {
+        // Direct API call as fallback if the SDK instance isn't available
+        const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+        
+        const requestBody = {
+          contents: [
+            {
+              parts: [
+                {
+                  text: systemPrompt
+                }
+              ]
+            }
+          ],
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: 1024,
+          }
+        };
+        
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${API_KEY}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(requestBody),
+          }
+        );
+        
+        if (!response.ok) {
+          throw new Error(`Resource API request failed with status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (!data || !data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+          throw new Error("Invalid response structure from API for resources");
+        }
+        
+        const textResponse = data.candidates[0].content.parts[0].text;
+        console.log("Resources API Response:", textResponse);
+        
+        // Parse resources from text
+        const resourceList = textResponse
+          .split('\n')
+          .filter(line => line.trim().startsWith('-') || line.trim().startsWith('*'))
+          .map(line => {
+            // Extract the name from the bold formatting if present
+            const boldMatch = line.match(/\*\*(.*?)\*\*/);
+            const name = boldMatch ? boldMatch[1] : line.replace(/^[-*]\s*/, '').split(':')[0].trim();
+            
+            // Get the description
+            const description = line.replace(/^[-*]\s*/, '').replace(/\*\*(.*?)\*\*/g, '$1').trim();
+            
+            // Check if URL is present
+            const urlMatch = description.match(/https?:\/\/[^\s]+/);
+            const url = urlMatch ? urlMatch[0] : '';
+            
+            // Clean description by removing the URL if present
+            const cleanDescription = description.replace(urlMatch ? urlMatch[0] : '', '').trim();
+            
+            return { 
+              name, 
+              description: cleanDescription, 
+              url
+            };
+          });
+        
+        if (resourceList.length > 0) {
+          setResources(resourceList);
+        } else {
+          throw new Error("Could not extract resources from response");
+        }
+      }
+    } catch (error) {
+      console.error("Error generating resources:", error);
       setResources(getFallbackResources(career));
     }
   };
@@ -214,6 +476,13 @@ const Roadmap = ({ jobTitle, currentGrade }) => {
         { name: "Khan Academy Medicine", description: "Free courses on medical topics", url: "https://www.khanacademy.org/science/health-and-medicine" },
         { name: "Coursera Health Courses", description: "University-level courses on healthcare", url: "https://www.coursera.org/browse/health" },
         { name: "NEET Preparation Resources", description: "Study materials for medical entrance exams", url: "" }
+      ];
+    } else if (lowerCareer.includes('web') || lowerCareer.includes('developer') || lowerCareer.includes('backend')) {
+      return [
+        { name: "MDN Web Docs", description: "Comprehensive web development documentation", url: "https://developer.mozilla.org/en-US/" },
+        { name: "FreeCodeCamp", description: "Free interactive coding lessons", url: "https://www.freecodecamp.org/" },
+        { name: "The Odin Project", description: "Full-stack curriculum for web developers", url: "https://www.theodinproject.com/" },
+        { name: "Backend Masters", description: "Specialized backend development resources", url: "https://roadmap.sh/backend" }
       ];
     } else if (lowerCareer.includes('engineer') || lowerCareer.includes('tech')) {
       return [
@@ -235,7 +504,35 @@ const Roadmap = ({ jobTitle, currentGrade }) => {
   };
 
   const handleToggleCompletion = (index) => {
-    toggleStepCompletion(jobTitle, index);
+    try {
+      console.log("Toggling step completion for job:", jobTitle, "index:", index);
+      
+      // First update local state for immediate UI feedback
+      const updatedSteps = [...localCompletedSteps];
+      const stepIndex = updatedSteps.indexOf(index);
+      
+      if (stepIndex === -1) {
+        updatedSteps.push(index);
+      } else {
+        updatedSteps.splice(stepIndex, 1);
+      }
+      
+      setLocalCompletedSteps(updatedSteps);
+      
+      // Then try to update in the user context/backend if available
+      if (userContext && userContext.toggleStepCompletion) {
+        userContext.toggleStepCompletion(jobTitle, index);
+      }
+    } catch (error) {
+      console.error("Error toggling step completion:", error);
+    }
+    
+    // Force refresh progress calculation
+    const currentSteps = getCompletedSteps(jobTitle);
+    if (roadmap.length > 0) {
+      const percentage = Math.round((currentSteps.length / roadmap.length) * 100);
+      setProgress(percentage);
+    }
   };
 
   // Generate tips for a specific roadmap step
@@ -381,6 +678,15 @@ const Roadmap = ({ jobTitle, currentGrade }) => {
         (Grade {currentGrade})
       </h3>
       
+      {!isAuthenticated && (
+        <div className="bg-blue-50 p-3 rounded-lg border border-blue-200 mb-4">
+          <p className="text-blue-700 text-sm">
+            <span className="font-semibold">Note:</span> You're viewing in guest mode. 
+            Your progress won't be saved between sessions.
+          </p>
+        </div>
+      )}
+      
       {isLoading ? (
         <div className="flex justify-center items-center py-20">
           <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-teal-500 border-opacity-50"></div>
@@ -393,6 +699,18 @@ const Roadmap = ({ jobTitle, currentGrade }) => {
             className="mt-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
           >
             Try Again
+          </button>
+        </div>
+      ) : generationAttempted && (!roadmap || roadmap.length === 0) ? (
+        <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+          <p className="text-yellow-700">
+            No roadmap could be generated. Please try again or select a different career.
+          </p>
+          <button
+            onClick={generateRoadmap}
+            className="mt-2 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
+          >
+            Generate Roadmap
           </button>
         </div>
       ) : (

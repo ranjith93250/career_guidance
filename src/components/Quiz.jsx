@@ -1,13 +1,26 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { useUserContext } from "../contexts/UserContext";
 
-const Quiz = ({ onComplete, grade }) => {
+const Quiz = ({ onComplete, grade, onQuizFinished }) => {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState({});
   const [isLoading, setIsLoading] = useState(false);
+  const [savingQuiz, setSavingQuiz] = useState(false);
+  const [error, setError] = useState(null);
+
+  const { isAuthenticated, saveQuizResults } = useUserContext();
 
   const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+  // Reset state if grade changes (e.g. when retaking quiz)
+  useEffect(() => {
+    console.log(`Quiz grade changed to: ${grade}`);
+    // Reset the current question and answers when grade changes
+    setCurrentQuestion(0);
+    setAnswers({});
+  }, [grade]);
 
   const questions = {
     10: [
@@ -40,38 +53,109 @@ const Quiz = ({ onComplete, grade }) => {
     if (currentQuestion < currentQuestions.length - 1) {
       setCurrentQuestion(currentQuestion + 1);
     } else {
+      // This is the final question, handle submission
+      if (!answers[currentQuestion + 1]?.trim()) {
+        return; // Don't proceed if there's no answer
+      }
+      
       setIsLoading(true);
+      console.log("Starting quiz submission process");
+      
       try {
+        // Format the answers for submission
+        const formattedAnswers = {
+          ...Object.keys(answers).reduce((acc, key) => {
+            acc[key] = answers[key];
+            return acc;
+          }, {}),
+          grade: grade // Include the current grade in the answers
+        };
+        
+        console.log("Quiz answers:", formattedAnswers);
+        
+        // Prepare prompt for career suggestions
         const prompt = `Based on the following answers from a ${grade}th grade student, suggest 3 career paths with job titles and short descriptions:\n
           1. Favorite subject/activity: ${answers[1] || "N/A"}\n
           2. Preferred work environment: ${answers[2] || "N/A"}\n
           3. Proudest skill: ${answers[3] || "N/A"}\n
           4. Desired impact: ${answers[4] || "N/A"}\n
           Format each suggestion as: "Job Title: Description"`;
-        console.log("Quiz prompt:", prompt);
+        
+        console.log("Sending prompt to AI:", prompt);
+        
+        // Get career suggestions from the AI
         const result = await model.generateContent(prompt);
         const text = result.response.text();
-        console.log("Quiz raw response:", text);
-
-        const jobs = text
+        console.log("AI response received:", text);
+        
+        // Process the suggestions
+        const suggestedCareers = text
           .split("\n")
           .filter((line) => line.trim() !== "" && line.includes(":"))
           .map((line) => {
             const firstColonIndex = line.indexOf(": ");
             if (firstColonIndex === -1) {
-              return { title: line, description: "No description available" };
+              return { title: line.trim() };
             }
             const title = line.substring(0, firstColonIndex).trim();
             const description = line.substring(firstColonIndex + 2).trim();
             return { title, description };
           });
-        console.log("Parsed jobs:", jobs);
-        onComplete(jobs);
+        
+        console.log("Processed career suggestions:", suggestedCareers);
+        
+        // Make sure we have at least some suggestions
+        let finalJobs = suggestedCareers;
+        
+        if (!finalJobs || finalJobs.length === 0) {
+          console.log("Using fallback job suggestions");
+          // Fallback if AI didn't provide valid suggestions
+          finalJobs = [
+            { title: "Software Developer", description: "Creates applications and systems using programming languages." },
+            { title: "Data Analyst", description: "Interprets data to help organizations make better decisions." },
+            { title: "Digital Marketing Specialist", description: "Manages online marketing campaigns and strategies." }
+          ];
+        }
+        
+        // Save quiz results if user is authenticated
+        if (isAuthenticated) {
+          setSavingQuiz(true);
+          console.log("Saving quiz results to database");
+          
+          try {
+            await saveQuizResults(formattedAnswers, finalJobs);
+            console.log("Quiz results saved successfully");
+          } catch (error) {
+            console.error("Error saving quiz results:", error);
+          } finally {
+            setSavingQuiz(false);
+          }
+        }
+        
+        // Call onComplete with the job suggestions to transition to the results page
+        console.log("Calling onComplete with job suggestions:", finalJobs);
+        onComplete(formattedAnswers, finalJobs.map(job => job.title));
+        
+        // Call onQuizFinished if provided to signal quiz completion
+        if (onQuizFinished) {
+          onQuizFinished();
+        }
+        
+        // Track completion in localStorage
+        localStorage.setItem('quiz_completed', 'true');
+        
       } catch (error) {
-        console.log("Quiz error:", error.message);
-        onComplete([
-          { title: "Default Job 1", description: "An error occurred. Try again later." },
-        ]);
+        console.error("Error processing quiz submission:", error);
+        
+        // Fallback if there was an error
+        const fallbackJobs = [
+          { title: "Software Developer", description: "Creates applications and systems using programming languages." },
+          { title: "Data Analyst", description: "Interprets data to help organizations make better decisions." },
+          { title: "Digital Marketing Specialist", description: "Manages online marketing campaigns and strategies." }
+        ];
+        
+        console.log("Using fallback jobs due to error");
+        onComplete(formattedAnswers, fallbackJobs.map(job => job.title));
       } finally {
         setIsLoading(false);
       }
@@ -88,7 +172,9 @@ const Quiz = ({ onComplete, grade }) => {
 
   return (
     <div className="max-w-2xl mx-auto p-6 bg-white rounded-xl shadow-lg">
-      <h2 className="text-2xl font-bold text-teal-800 mb-6">Career Quiz for Grade {grade}</h2>
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold text-teal-800">Career Quiz for Grade {grade}</h2>
+      </div>
       
       {/* Progress indicator */}
       <div className="mb-6 flex justify-between">
@@ -131,20 +217,20 @@ const Quiz = ({ onComplete, grade }) => {
         
         <button
           onClick={handleNext}
-          disabled={isLoading || !answers[currentQuestion + 1]?.trim()}
+          disabled={isLoading || savingQuiz || !answers[currentQuestion + 1]?.trim()}
           className={`py-3 px-6 bg-teal-600 text-white rounded-lg transition-colors ${
-            answers[currentQuestion + 1]?.trim() 
+            answers[currentQuestion + 1]?.trim() && !isLoading && !savingQuiz
               ? 'hover:bg-teal-700' 
               : 'opacity-50 cursor-not-allowed'
           }`}
         >
-          {isLoading ? (
+          {isLoading || savingQuiz ? (
             <span className="flex items-center">
               <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              Processing...
+              {isLoading ? "Processing..." : "Saving..."}
             </span>
           ) : currentQuestion === currentQuestions.length - 1 ? (
             <span className="flex items-center">
@@ -173,6 +259,13 @@ const Quiz = ({ onComplete, grade }) => {
       </div>
     </div>
   );
+};
+
+// Set default props
+Quiz.defaultProps = {
+  onComplete: () => {},
+  grade: 10,
+  onQuizFinished: null
 };
 
 export default Quiz;

@@ -134,3 +134,8 @@
 .read-the-docs {
   color: #888;
 }
+
+/* Simple rule to ensure only 3 job cards are displayed */
+.flex-wrap.gap-6 > div:nth-of-type(n+4) {
+  display: none !important;
+}
