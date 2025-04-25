@@ -4,6 +4,7 @@ import { useUserContext } from "../contexts/UserContext";
 const Login = ({ setIsLoggedIn, setGrade }) => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [emailError, setEmailError] = useState("");
   const [selectedGrade, setSelectedGrade] = useState(10);
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
@@ -16,6 +17,39 @@ const Login = ({ setIsLoggedIn, setGrade }) => {
   const [redirectCountdown, setRedirectCountdown] = useState(3);
 
   const { login, register } = useUserContext();
+
+  // Email validation function using regex
+  const validateEmail = (email) => {
+    // First check for basic email format
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    
+    // Then specifically check if it ends with @gmail.com
+    const isGmailAccount = email.toLowerCase().endsWith('@gmail.com');
+    
+    // Email must pass both tests - correct format AND be a gmail account
+    return emailRegex.test(email) && isGmailAccount;
+  };
+
+  // Handle email input and validate in real-time
+  const handleEmailChange = (e) => {
+    const emailValue = e.target.value;
+    setEmail(emailValue);
+    
+    // Only show validation error if there's input and it's invalid
+    if (emailValue) {
+      if (!validateEmail(emailValue)) {
+        if (!emailValue.toLowerCase().endsWith('@gmail.com')) {
+          setEmailError("Email must end with @gmail.com");
+        } else {
+          setEmailError("Invalid email format. Please use name@gmail.com");
+        }
+      } else {
+        setEmailError("");
+      }
+    } else {
+      setEmailError("");
+    }
+  };
 
   // If registration success is shown, redirect to login page after a delay
   useEffect(() => {
@@ -52,53 +86,68 @@ const Login = ({ setIsLoggedIn, setGrade }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true);
+    
+    // Reset any previous messages
     setMessage("");
+    setEmailError("");
+    
+    // Validate and sanitize email
+    const sanitizedEmail = email.trim().toLowerCase();
+    
+    // Validate email format
+    if (!validateEmail(sanitizedEmail)) {
+      setEmailError("Invalid email format. Please use name@gmail.com");
+      return;
+    }
+    
+    setIsLoading(true);
 
     try {
       let result;
 
       if (isRegistering) {
         // Registration - this is a NEW user
-        if (!name || !email || !password || !selectedGrade) {
+        if (!name || !sanitizedEmail || !password || !selectedGrade) {
           setMessage("All fields are required");
           setIsLoading(false);
           return;
         }
 
-        result = await register(name, email, password, selectedGrade);
+        result = await register(name, sanitizedEmail, password, selectedGrade);
         if (result.success) {
-          console.log("New user registered successfully:", email);
+          console.log("New user registered successfully:", sanitizedEmail);
           
           // Create the user object with isNew flag
           const user = {
             name: name,
-            email: email,
+            email: sanitizedEmail,
             grade: selectedGrade,
           };
           
           // Immediately login the new user and send them to the quiz
           setIsLoggedIn(user, true); // Pass TRUE to indicate this is a new user
           setGrade(selectedGrade);
+        } else if (result.error && result.error.includes("already exists")) {
+          setMessage("This email is already registered. Please login instead.");
         }
       } else {
         // Login - this is a RETURNING user
-        if (!email || !password) {
+        if (!sanitizedEmail || !password) {
           setMessage("Email and password are required");
           setIsLoading(false);
           return;
         }
 
         try {
-          result = await login(email, password);
+          result = await login(sanitizedEmail, password);
           if (result.success) {
-            console.log("Returning user logged in:", email);
+            console.log("Returning user logged in:", sanitizedEmail);
             
             // For returning users, pass the user profile
             const userGrade = result.user?.grade || 10;
             const user = {
               ...(result.user || {}),
-              email: email,
+              email: sanitizedEmail,
               grade: userGrade,
             };
             
@@ -136,6 +185,7 @@ const Login = ({ setIsLoggedIn, setGrade }) => {
   const toggleMode = () => {
     setIsRegistering(!isRegistering);
     setMessage("");
+    setEmailError("");
     setRegistrationSuccess(false);
     setRedirectingToQuiz(false);
   };
@@ -187,15 +237,24 @@ const Login = ({ setIsLoggedIn, setGrade }) => {
           />
         )}
         
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="Email Address"
-          className="w-full p-3 mb-4 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-          required
-          disabled={registrationSuccess}
-        />
+        <div className="mb-4">
+          <input
+            type="email"
+            value={email}
+            onChange={handleEmailChange}
+            placeholder="Email Address (must be a Gmail account)"
+            className={`w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+              emailError ? 'border-red-500' : 'border-gray-300'
+            }`}
+            required
+            pattern="[a-zA-Z0-9._%+-]+@gmail\.com$"
+            title="Please enter a valid Gmail address (example@gmail.com)"
+            disabled={registrationSuccess}
+          />
+          {emailError && (
+            <p className="mt-1 text-sm text-red-600">{emailError}</p>
+          )}
+        </div>
         
         <input
           type="password"
@@ -228,7 +287,7 @@ const Login = ({ setIsLoggedIn, setGrade }) => {
 
         <button
           type="submit"
-          disabled={isLoading || registrationSuccess}
+          disabled={isLoading || registrationSuccess || emailError}
           className="w-full py-3 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors disabled:bg-teal-400"
         >
           {isLoading ? (

@@ -19,4 +19,18 @@ eslint-plugin-react-refresh>=0.4.3
 
 # Note: For a React project, these dependencies are typically managed via package.json and npm/yarn
 # Use the following command to install dependencies (after setting up package.json):
-# npm install or yarn install 
+# npm install or yarn install
+
+# Python Backend Dependencies
+Flask==2.0.1
+Flask-Cors==3.0.10
+python-dotenv==0.19.2
+requests==2.28.1
+gunicorn==20.1.0
+
+# For ML/AI features (if used)
+numpy==1.23.5
+pandas==1.5.3
+
+# Note: This is for the Python backend only.
+# For frontend JavaScript dependencies, use npm or yarn with package.json 

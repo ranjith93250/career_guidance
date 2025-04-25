@@ -63,6 +63,52 @@ const apiCall = async (endpoint, method = 'GET', data = null) => {
   }
 };
 
+// Email validation helper function
+const validateEmail = (email) => {
+  // Check if email is empty
+  if (!email || email.trim() === '') {
+    throw new Error("Email is required");
+  }
+  
+  // Convert to lowercase and trim whitespace
+  const sanitizedEmail = email.trim().toLowerCase();
+  
+  // Check if email ends with @gmail.com
+  if (!sanitizedEmail.endsWith('@gmail.com')) {
+    throw new Error("Email must end with @gmail.com");
+  }
+  
+  // Use regex to validate email format
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+  if (!emailRegex.test(sanitizedEmail)) {
+    throw new Error("Invalid email format");
+  }
+  
+  return sanitizedEmail;
+};
+
+// Sanitize user input to prevent injection
+const sanitizeUserInput = (userData) => {
+  // Create a copy to avoid modifying the original
+  const sanitized = { ...userData };
+  
+  // Sanitize email if present
+  if (sanitized.email) {
+    try {
+      sanitized.email = validateEmail(sanitized.email);
+    } catch (error) {
+      throw error; // Rethrow to handle at higher level
+    }
+  }
+  
+  // Sanitize other fields as needed
+  if (sanitized.name) {
+    sanitized.name = sanitized.name.trim();
+  }
+  
+  return sanitized;
+};
+
 // Local storage fallbacks
 
 // Save data to localStorage with key prefixing
@@ -90,61 +136,113 @@ const getFromLocalStorage = (key) => {
 // Auth APIs with fallbacks
 export const registerUser = async (userData) => {
   try {
-    return await apiCall('/register', 'POST', userData);
-  } catch (error) {
-    console.error('Registration failed, using local registration:', error);
-    // Implement local fallback
+    // Validate and sanitize user input
+    const sanitizedUserData = sanitizeUserInput(userData);
     
-    // Check if user already exists
-    const existingUser = getFromLocalStorage(`user_${userData.email}`);
-    if (existingUser) {
-      throw new Error("Email already registered. Please use a different email or login.");
+    // Check if required fields are present
+    if (!sanitizedUserData.name || !sanitizedUserData.email || !sanitizedUserData.password) {
+      throw new Error("Name, email, and password are required");
     }
     
-    const mockUser = {
-      id: Date.now(),
-      name: userData.name,
-      email: userData.email,
-      grade: userData.grade,
-      isNew: true // Mark as new user
-    };
+    return await apiCall('/register', 'POST', sanitizedUserData);
+  } catch (error) {
+    console.error('Registration failed, using local registration:', error);
     
-    // Store user in localStorage for fallback
-    saveToLocalStorage(`user_${userData.email}`, mockUser);
+    // If it's a validation error, rethrow it
+    if (error.message === "Invalid email format" || 
+        error.message === "Email is required" ||
+        error.message === "Name, email, and password are required") {
+      throw error;
+    }
     
-    // Store password separately (in a real app, you would hash this)
-    saveToLocalStorage(`password_${userData.email}`, userData.password);
-    
-    return { 
-      message: 'User registered successfully (local mode)',
-      user: mockUser
-    };
+    // Implement local fallback
+    try {
+      // Sanitize the user data
+      const sanitizedUserData = sanitizeUserInput(userData);
+      
+      // Check if user already exists
+      const existingUser = getFromLocalStorage(`user_${sanitizedUserData.email}`);
+      if (existingUser) {
+        throw new Error("Email already registered. Please use a different email or login.");
+      }
+      
+      const mockUser = {
+        id: Date.now(),
+        name: sanitizedUserData.name,
+        email: sanitizedUserData.email,
+        grade: sanitizedUserData.grade,
+        isNew: true // Mark as new user
+      };
+      
+      // Store user in localStorage for fallback
+      saveToLocalStorage(`user_${sanitizedUserData.email}`, mockUser);
+      
+      // Store password separately (in a real app, you would hash this)
+      saveToLocalStorage(`password_${sanitizedUserData.email}`, sanitizedUserData.password);
+      
+      return { 
+        message: 'User registered successfully (local mode)',
+        user: mockUser,
+        success: true
+      };
+    } catch (localError) {
+      throw localError;
+    }
   }
 };
 
 export const loginUser = async (credentials) => {
   try {
+    // Validate email format before sending to server
+    try {
+      credentials.email = validateEmail(credentials.email);
+    } catch (validationError) {
+      throw validationError;
+    }
+    
+    // Check if password is provided
+    if (!credentials.password || credentials.password.trim() === '') {
+      throw new Error("Password is required");
+    }
+    
     return await apiCall('/login', 'POST', credentials);
   } catch (error) {
     console.error('Login failed, using local login:', error);
+    
+    // If it's a validation error, rethrow it
+    if (error.message === "Invalid email format" || 
+        error.message === "Email is required" ||
+        error.message === "Password is required") {
+      throw error;
+    }
+    
     // Check if this is an "Invalid credentials" error from the server
     if (error.message === "Invalid credentials") {
       throw new Error("Invalid credentials");
     }
     
+    // For fallback, try to sanitize the email first
+    let sanitizedEmail;
+    try {
+      sanitizedEmail = validateEmail(credentials.email);
+    } catch (validationError) {
+      throw validationError;
+    }
+    
     // Check local storage for user with this email
-    const localUser = getFromLocalStorage(`user_${credentials.email}`);
+    const localUser = getFromLocalStorage(`user_${sanitizedEmail}`);
     
     if (localUser) {
       // For local validation, implement a simple password check
       // In a real app, you'd use a proper hashing mechanism, but for demo purposes:
-      const savedPassword = getFromLocalStorage(`password_${credentials.email}`);
+      const savedPassword = getFromLocalStorage(`password_${sanitizedEmail}`);
       
       if (savedPassword && savedPassword === credentials.password) {
         // Return existing user from localStorage only if password matches
         return { 
           message: 'Login successful (local mode)',
-          user: localUser
+          user: localUser,
+          success: true
         };
       } else {
         // Password doesn't match - reject login

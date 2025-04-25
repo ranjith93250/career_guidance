@@ -47,47 +47,44 @@ The Career Guidance Application is an interactive web platform designed to help 
 ### Prerequisites
 - Node.js (v14 or higher)
 - npm or yarn package manager
+- Python 3.8+ (for backend)
 - Google Generative AI API key
 
-### Setup Steps
+### Simple Setup Instructions
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/yourusername/career-guidance.git
-   cd career-guidance
-   ```
+1. **Clone the repository and navigate to the project folder**
 
-2. **Install dependencies**
+2. **Install JavaScript dependencies**
    ```bash
    npm install
-   # or
-   yarn install
    ```
 
-3. **Create environment variables**
-   Create a `.env` file in the root directory with your API key:
+3. **Install Python dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Create environment variables**
+   Create a `.env` file in the root directory:
    ```
    VITE_GEMINI_API_KEY=your_api_key_here
    ```
 
 ## Running the Application
 
-1. **Start the development server**
+1. **Start the frontend development server**
    ```bash
    npm run dev
-   # or
-   yarn dev
    ```
 
 2. **Access the application**
    Open your browser and navigate to `http://localhost:5173`
 
-3. **Building for production**
-   ```bash
-   npm run build
-   # or
-   yarn build
-   ```
+## Troubleshooting
+
+- **Error with "@" symbol in requirements.txt**: Make sure you're using npm for JavaScript packages and pip for Python packages.
+- **Missing dependencies**: Run `npm install` for frontend and `pip install -r requirements.txt` for backend.
+- **API key issues**: Ensure your .env file contains a valid Google Gemini API key.
 
 ## Usage Guide
 
