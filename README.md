@@ -1,7 +1,7 @@
 # Career Guidance Application
 
 ## Overview
-The Career Guidance Application is an interactive web platform designed to help students explore career options based on their interests, skills, and academic preferences. This tool uses AI-driven recommendations to suggest suitable career paths, provide detailed information about various professions, and offer educational roadmaps tailored to users' current grades levels.
+The Career Guidance Application is an interactive web platform designed to help students explore career options based on their interests, skills, and academic preferences. This tool uses AI-driven recommendations to suggest suitable career paths, provide detailed information about various professions, and offer educational roadmaps tailored to users' current grade levels.
 
 ## Features
 
