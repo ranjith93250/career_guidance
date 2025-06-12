@@ -24,22 +24,22 @@ const Quiz = ({ onComplete, grade, onQuizFinished }) => {
 
   const questions = {
     10: [
-      "What is your favorite subject or activity in grade 10?",
-      "What kind of work environment do you prefer (e.g., indoors, outdoors, collaborative)?",
-      "What skill are you most proud of this year?",
-      "What kind of impact do you want to have as a 10th grader?",
+      "Which subject do you enjoy the most in school, and what do you like about it?",
+      "What kind of activities make you feel excited or happy (like drawing, solving puzzles, playing sports, etc.)?",
+      "If you could be anything for a day — like a teacher, scientist, designer, doctor, etc. — what would you choose and why?",
+      "Do you like doing things alone or working with others in a group?",
     ],
     11: [
-      "What subject are you excelling in during grade 11?",
-      "Do you prefer working alone or in a team?",
-      "What skill have you developed this year?",
-      "What impact do you aim for as an 11th grader?",
+      "What is your favorite subject this year, and what do you like most about it?",
+      "What kind of activities do you enjoy doing in your free time (like gaming, drawing, fixing things, helping others, etc.)?",
+      "Do you enjoy explaining things to others, creating new ideas, or solving tricky problems? Choose one and say why.",
+      "What kind of job do you think would make you feel happy — one with people, with computers, with nature, or something else?",
     ],
     12: [
-      "What's your strongest subject in grade 12?",
-      "Do you prefer a structured or creative work environment?",
-      "What skill have you mastered this year?",
-      "What legacy do you want to leave as a 12th grader?",
+      "Have you decided on a college course or career path? If yes, what is it and what influenced your choice?",
+      "What are your long-term goals (5-10 years)? How do you think your chosen field can help you reach them?",
+      "Do you prefer jobs that involve leadership and responsibility or those that involve supporting roles and teamwork? Explain.",
+      "Which matters more to you in a future job: salary, work-life balance, job security, or passion? Why?",
     ],
   };
 
@@ -132,30 +132,55 @@ const Quiz = ({ onComplete, grade, onQuizFinished }) => {
           }
         }
         
-        // Call onComplete with the job suggestions to transition to the results page
-        console.log("Calling onComplete with job suggestions:", finalJobs);
-        onComplete(formattedAnswers, finalJobs.map(job => job.title));
+        // Track completion in localStorage BEFORE calling onComplete
+        localStorage.setItem('quiz_completed', 'true');
+        localStorage.setItem('suggested_jobs', JSON.stringify(finalJobs.map(job => ({title: job.title}))));
         
-        // Call onQuizFinished if provided to signal quiz completion
+        // Call onQuizFinished to signal quiz completion BEFORE calling onComplete
         if (onQuizFinished) {
+          console.log("Calling onQuizFinished to reset isRetakingQuiz flag");
           onQuizFinished();
         }
         
-        // Track completion in localStorage
-        localStorage.setItem('quiz_completed', 'true');
+        // Ensure we're passing job titles correctly
+        const jobTitles = finalJobs.map(job => job.title || job);
+        console.log("Calling onComplete with job titles:", jobTitles);
+        
+        // Add a small delay to ensure state updates have propagated
+        setTimeout(() => {
+          // Call onComplete with the job suggestions to transition to the results page
+          onComplete(formattedAnswers, jobTitles);
+          console.log("Quiz completion process finished successfully");
+        }, 100);
         
       } catch (error) {
         console.error("Error processing quiz submission:", error);
         
         // Fallback if there was an error
         const fallbackJobs = [
-          { title: "Software Developer", description: "Creates applications and systems using programming languages." },
-          { title: "Data Analyst", description: "Interprets data to help organizations make better decisions." },
-          { title: "Digital Marketing Specialist", description: "Manages online marketing campaigns and strategies." }
+          "Software Developer", 
+          "Data Analyst", 
+          "Digital Marketing Specialist"
         ];
         
-        console.log("Using fallback jobs due to error");
-        onComplete(formattedAnswers, fallbackJobs.map(job => job.title));
+        console.log("Using fallback jobs due to error:", fallbackJobs);
+        
+        // Track completion in localStorage
+        localStorage.setItem('quiz_completed', 'true');
+        localStorage.setItem('suggested_jobs', JSON.stringify(fallbackJobs.map(title => ({title}))));
+        
+        // Call onQuizFinished to reset flags
+        if (onQuizFinished) {
+          console.log("Calling onQuizFinished after error");
+          onQuizFinished();
+        }
+        
+        // Add a small delay to ensure state updates have propagated
+        setTimeout(() => {
+          onComplete(formattedAnswers, fallbackJobs);
+          console.log("Quiz completion handled with fallback jobs after error");
+        }, 100);
+        
       } finally {
         setIsLoading(false);
       }
